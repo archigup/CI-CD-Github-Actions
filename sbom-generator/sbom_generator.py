@@ -23,6 +23,7 @@ from spdx_tools.spdx.model import (
     File,
     ChecksumAlgorithm,
     Checksum,
+    ExtractedLicensingInfo,
 )
 from spdx_tools.common.spdx_licensing import spdx_licensing
 from spdx_tools.spdx.writer.write_anything import write_file
@@ -220,6 +221,35 @@ def generate_sbom(
     packages = []
     relationships = []
     files = []
+    extracted_licensing_info = []
+
+    # Collect custom licenses that need to be extracted
+    custom_licenses = set()
+    for file_info in included_file_info.values():
+        lic = file_info.get("license", SpdxNoAssertion())
+        if not isinstance(lic, SpdxNoAssertion) and lic.startswith("LicenseRef-"):
+            custom_licenses.add(lic)
+
+    if "dependencies" in manifest:
+        for dep in manifest["dependencies"]:
+            lic = dep["license"]
+            if not isinstance(lic, SpdxNoAssertion) and lic.startswith("LicenseRef-"):
+                custom_licenses.add(lic)
+
+    if "testDependencies" in manifest:
+        for dep in manifest["testDependencies"]:
+            lic = dep["license"]
+            if not isinstance(lic, SpdxNoAssertion) and lic.startswith("LicenseRef-"):
+                custom_licenses.add(lic)
+
+    # Create extracted licensing info for custom licenses
+    for custom_lic in custom_licenses:
+        extracted_licensing_info.append(
+            ExtractedLicensingInfo(
+                license_id=custom_lic,
+                extracted_text="See project repository for license details"
+            )
+        )
 
     # Generate output filenames based on package info
     output_files = [
@@ -481,6 +511,7 @@ def generate_sbom(
             packages=packages,
             files=files,
             relationships=relationships,
+            extracted_licensing_info=extracted_licensing_info,
         )
 
         write_file(document, output_path, validate=True)
